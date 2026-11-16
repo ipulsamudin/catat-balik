@@ -1,0 +1,146 @@
+<!doctype html>
+<!--
+  Halaman uji aksi. Disalin ke akar proyek sebagai __smoke-aksi.html oleh
+  tools/smoke.mjs lalu dibuka di browser headless, dan dihapus lagi setelah uji.
+  Tujuannya menguji jalur TULIS sungguhan (db + store + localStorage + model),
+  bukan sekadar tampilan: catat -> saldo berubah -> balasan -> hapus.
+-->
+<meta charset="utf-8">
+<title>uji aksi</title>
+<pre id="hasil">menjalankan…</pre>
+<script type="module">
+// Semua import STATIS dan badan skrip tanpa await: module script yang ditunda
+// menahan event load, jadi hasilnya dijamin sudah tertulis saat DOM di-dump.
+import * as db from './assets/js/db.js';
+import * as store from './assets/js/store.js';
+import * as model from './assets/js/model.js';
+import * as supa from './assets/js/supabase.js';
+import { createClient } from './vendor/supabase-js-2.58.0.esm.js';
+
+// PENGAMAN: halaman ini mengosongkan data untuk menguji jalur tulis, dan ikut
+// ter-deploy bersama repo. Di luar localhost ia menolak jalan supaya tidak ada
+// yang kehilangan catatannya karena tak sengaja membuka URL ini.
+const DI_LOKAL = ['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname);
+if (!DI_LOKAL) {
+  document.getElementById('hasil').textContent =
+    'Halaman uji internal. Hanya bisa dijalankan di localhost karena menghapus data aplikasi.';
+  document.title = 'uji aksi dinonaktifkan';
+  throw new Error('smoke-aksi hanya untuk localhost');
+}
+
+const baris = [];
+let gagal = 0;
+
+function cek(nama, benar, detail = '') {
+  baris.push(`${benar ? 'ok   ' : 'GAGAL'} ${nama}${benar ? '' : ` — ${detail}`}`);
+  if (!benar) gagal++;
+}
+const sama = (nama, dapat, harap) =>
+  cek(nama, JSON.stringify(dapat) === JSON.stringify(harap), `dapat ${JSON.stringify(dapat)}, diharapkan ${JSON.stringify(harap)}`);
+
+const saldo = (id) => model.hitungNeraca(store.data()).peta.get(id)?.saldo ?? null;
+const tersimpan = () => JSON.parse(localStorage.getItem('catat-balik:v1') || '{}');
+
+try {
+  // Mulai dari data kosong supaya hasil tidak bergantung sisa uji sebelumnya.
+  store.gantiData({ people: [], events: [], entries: [], settings: { pembulatan: 50000, penyesuaian: 0 } });
+  sama('mulai kosong', store.data().entries.length, 0);
+
+  // 1. Orang baru dibuat otomatis dari nama.
+  const orang = db.pastikanOrang('Tamu Satu');
+  cek('orang baru punya id', !!orang.id, JSON.stringify(orang));
+  sama('nama orang tersimpan', orang.nama, 'Tamu Satu');
+
+  // 2. Nama yang sama (beda huruf besar/spasi) tidak menggandakan orang.
+  const lagi = db.pastikanOrang('  tamu   satu ');
+  sama('orang tidak digandakan', lagi.id, orang.id);
+  sama('jumlah orang tetap satu', db.orangAktif().length, 1);
+
+  // 3. Catat sumbangan masuk -> saldo naik.
+  const masuk = db.simpanEntri({
+    arah: 'masuk', person_id: orang.id, tanggal: '2026-01-01', jenis: 'uang', nominal: 200000,
+  });
+  sama('saldo setelah entri masuk', saldo(orang.id), 200000);
+  sama('entri masuk belum dibalas', model.idSudahDibalas(store.data().entries).has(masuk.id), false);
+
+  // 4. Barang dengan taksiran ikut menambah saldo; tanpa taksiran dihitung nol.
+  db.simpanEntri({
+    arah: 'masuk', person_id: orang.id, tanggal: '2026-01-02', jenis: 'barang',
+    barang_nama: 'Gula', barang_jumlah: '2,5', barang_satuan: 'kg', nilai_taksir: 50000,
+  });
+  const tanpaTaksir = db.simpanEntri({
+    arah: 'masuk', person_id: orang.id, tanggal: '2026-01-03', jenis: 'barang', barang_nama: 'Kipas',
+  });
+  sama('saldo setelah barang bertaksiran', saldo(orang.id), 250000);
+  sama('jumlah desimal koma terbaca', store.data().entries.find((e) => e.barang_nama === 'Gula').barang_jumlah, 2.5);
+  sama('barang tanpa taksiran bernilai 0', model.nilaiEntri(tanpaTaksir), 0);
+
+  // 5. Catat balasan -> entri masuk bertanda dibalas, saldo berkurang.
+  db.catatBalasan(masuk.id, { nominal: 200000, tanggal: '2026-03-01' });
+  sama('entri masuk jadi sudah dibalas', model.idSudahDibalas(store.data().entries).has(masuk.id), true);
+  sama('saldo setelah balasan', saldo(orang.id), 50000);
+
+  // 6. Saran balasan membulatkan ke atas sesuai pengaturan.
+  const prio = model.prioritasBalas(store.data());
+  sama('masih muncul di prioritas', prio.length, 1);
+  sama('saran balasan dibulatkan', prio[0].saran, 50000);
+
+  // 7. Semua tulisan benar-benar mendarat di localStorage.
+  sama('localStorage menyimpan 4 entri', tersimpan().entries.length, 4);
+  cek('outbox terisi untuk sinkron', tersimpan().outbox.length >= 5, `outbox=${tersimpan().outbox.length}`);
+
+  // 8. Hapus = soft delete (baris tetap ada, tapi tidak dihitung).
+  db.hapusBaris('entries', masuk.id);
+  sama('baris tetap tersimpan untuk sinkron', tersimpan().entries.length, 4);
+  sama('entri terhapus punya deleted_at', !!store.data().entries.find((e) => e.id === masuk.id).deleted_at, true);
+  sama('saldo setelah entri masuk dihapus', saldo(orang.id), -150000);
+
+  // 9. Ubah entri yang sudah ada tidak menambah baris baru.
+  db.simpanEntri({ id: tanpaTaksir.id, arah: 'masuk', person_id: orang.id, tanggal: '2026-01-03', jenis: 'barang', barang_nama: 'Kipas', nilai_taksir: 300000 });
+  sama('jumlah entri tetap', tersimpan().entries.length, 4);
+  sama('saldo ikut nilai taksiran baru', saldo(orang.id), 150000);
+
+  // 10. Hapus orang ikut menghapus catatannya.
+  db.hapusOrang(orang.id, { ikutEntri: true });
+  sama('orang aktif habis', db.orangAktif().length, 0);
+  sama('tidak ada entri aktif', db.entriAktif().length, 0);
+  sama('ringkasan kosong', model.ringkasan(store.data()).totalMasuk, 0);
+
+  // 11. Acara: entri yang acaranya dihapus tidak ikut hilang.
+  const o2 = db.pastikanOrang('Tamu Dua');
+  const acara = db.simpanAcara({ nama: 'Hajatan Uji', jenis: 'pernikahan', tanggal: '2026-05-05', pihak: 'saya' });
+  db.simpanEntri({ arah: 'masuk', person_id: o2.id, event_id: acara.id, tanggal: '2026-05-05', jenis: 'uang', nominal: 75000 });
+  sama('rekap acara menghitung', model.rekapAcara(store.data(), acara.id).total, 75000);
+  db.hapusAcara(acara.id, { ikutEntri: false });
+  sama('acara hilang', db.acaraAktif().length, 0);
+  sama('entri tetap ada', db.entriAktif().length, 1);
+  sama('entri lepas dari acara', db.entriAktif()[0].event_id, null);
+
+  // 12. Vendor Supabase: bundel di ./vendor benar-benar jalan di browser
+  //     (tanpa jaringan — hanya merangkai objek klien & query builder).
+  const klien = createClient('https://contoh-uji.supabase.co', 'kunci-uji-palsu', {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  cek('klien supabase terbentuk dari vendor lokal',
+    !!klien && typeof klien.from === 'function' && !!klien.auth, `klien=${typeof klien}`);
+  cek('query builder upsert tersedia', typeof klien.from('entries').upsert === 'function');
+  cek('query builder select+filter tersedia',
+    typeof klien.from('entries').select('*').gt === 'function');
+
+  // 13. Pembacaan konfigurasi cloud dari pengaturan.
+  sama('belum terkonfigurasi', supa.terkonfigurasi(), false);
+  store.setSetting('supabaseUrl', 'https://contoh-uji.supabase.co/');
+  store.setSetting('anonKey', 'kunci-uji-palsu');
+  sama('terkonfigurasi setelah diisi', supa.terkonfigurasi(), true);
+  sama('garis miring di akhir URL dibuang', supa.konfigurasi().url, 'https://contoh-uji.supabase.co');
+  supa.simpanKonfigurasi('', '');
+  sama('konfigurasi bisa dikosongkan', supa.terkonfigurasi(), false);
+} catch (err) {
+  gagal++;
+  baris.push(`GAGAL exception — ${err && err.stack ? err.stack : err}`);
+}
+
+baris.push(gagal ? `AKSI GAGAL (${gagal})` : 'AKSI OK');
+document.getElementById('hasil').textContent = baris.join('\n');
+document.title = gagal ? 'AKSI GAGAL' : 'AKSI OK';
+</script>

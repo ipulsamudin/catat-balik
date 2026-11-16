@@ -1,0 +1,13 @@
+# Catat Balik tidak punya proses build; yang perlu diabaikan hanya sampah editor/OS.
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.vscode/
+.idea/
+node_modules/
+
+# Backup data pribadi jangan sampai ikut ter-commit.
+catat-balik-backup-*.json
+catat-balik-*.csv
+catat-balik-*.xlsx

@@ -1,0 +1,15 @@
+{
+  "name": "catat-balik",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Buku neraca balas budi hajatan — PWA tanpa build step, data lokal + sinkron Supabase.",
+  "type": "module",
+  "scripts": {
+    "serve": "node tools/serve.mjs",
+    "test": "node tools/selftest.mjs && node tools/cek-impor.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "test:all": "npm test && npm run smoke",
+    "icons": "node tools/make-icons.mjs"
+  },
+  "license": "MIT"
+}
