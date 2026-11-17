@@ -1,7 +1,7 @@
 // Service worker: aplikasi harus bisa dibuka dari nol tanpa internet.
 // Naikkan VERSI setiap kali berkas aplikasi berubah agar cache lama dibuang.
 
-const VERSI = 'catat-balik-v1';
+const VERSI = 'catat-balik-v3';
 
 const ASET = [
   './',

@@ -35,7 +35,7 @@ let aktif = null;
 
 // ---------- render ----------
 
-function tampilkan(view, ctx, tab, { jagaScroll = false } = {}) {
+function tampilkan(view, ctx, tab, { jagaScroll = false, jalur = '' } = {}) {
   const scroll = window.scrollY;
 
   // Setiap render memakai elemen baru: listener view sebelumnya ikut terbuang,
@@ -46,9 +46,9 @@ function tampilkan(view, ctx, tab, { jagaScroll = false } = {}) {
 
   const lengkap = {
     ...ctx,
-    gambarUlang: (patch = {}) => tampilkan(view, { ...ctx, ...patch }, tab, { jagaScroll: true }),
+    gambarUlang: (patch = {}) => tampilkan(view, { ...ctx, ...patch }, tab, { jagaScroll: true, jalur }),
   };
-  aktif = { view, ctx: lengkap, tab };
+  aktif = { view, ctx: lengkap, tab, jalur };
 
   try {
     const hasil = view.render(kotak, lengkap);
@@ -57,10 +57,17 @@ function tampilkan(view, ctx, tab, { jagaScroll = false } = {}) {
     tampilkanGalat(err);
   }
 
-  tandaiTab(tab);
+  tandaiTab(tab, jalur);
   document.title = `${view.judulHalaman || 'Catat Balik'} · Catat Balik`;
-  if (jagaScroll) window.scrollTo(0, scroll);
-  else window.scrollTo(0, 0);
+  if (jagaScroll) {
+    window.scrollTo(0, scroll);
+  } else {
+    window.scrollTo(0, 0);
+    // Pindah fokus ke isi halaman supaya pembaca layar tahu halamannya ganti.
+    // Hanya saat navigasi nyata: gambar ulang karena data berubah memakai
+    // jagaScroll, dan memfokus di situ akan mencuri fokus dari isian form.
+    wadah.focus({ preventScroll: true });
+  }
 }
 
 function tampilkanGalat(err) {
@@ -80,7 +87,7 @@ function rute() {
   const { jalur, query } = parseHash(location.hash);
   for (const [pola, view, tab] of RUTE) {
     const params = cocok(pola, jalur);
-    if (params) return tampilkan(view, { params, query }, tab);
+    if (params) return tampilkan(view, { params, query }, tab, { jalur });
   }
   wadah.innerHTML = `
     <div class="card">
@@ -91,9 +98,15 @@ function rute() {
   tandaiTab('beranda');
 }
 
-function tandaiTab(tab) {
+// Tab utama ditandai lewat data-tab seperti sebelumnya. Tautan sekunder yang
+// hanya tampil di sidebar desktop (Acara/Cetak/Impor/Pengaturan) tidak punya
+// data-tab, jadi ditandai dengan mencocokkan href pada jalur yang sedang aktif.
+// Keduanya bisa menyala bersamaan - itu memang dibaca sebagai seksi -> halaman.
+function tandaiTab(tab, jalur = '') {
   for (const a of document.querySelectorAll('.tabbar a')) {
-    if (a.dataset.tab === tab) a.setAttribute('aria-current', 'page');
+    const cocokTab = a.dataset.tab ? a.dataset.tab === tab : false;
+    const cocokJalur = a.classList.contains('rail-link') && jalur && a.getAttribute('href') === `#${jalur}`;
+    if (cocokTab || cocokJalur) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
 }
@@ -159,6 +172,9 @@ function mulai() {
   rute();
   window.addEventListener('hashchange', () => { tutupBanner(); rute(); });
 
+  // Tombol "x" di banner sebelumnya tidak punya listener sama sekali.
+  document.getElementById('banner-close')?.addEventListener('click', tutupBanner);
+
   // Data berubah (edit lokal maupun hasil pull) -> gambar ulang view yang
   // tidak sedang menampung isian form.
   let menunggu = false;
@@ -168,7 +184,7 @@ function mulai() {
     menunggu = true;
     requestAnimationFrame(() => {
       menunggu = false;
-      if (aktif) tampilkan(aktif.view, aktif.ctx, aktif.tab, { jagaScroll: true });
+      if (aktif) tampilkan(aktif.view, aktif.ctx, aktif.tab, { jagaScroll: true, jalur: aktif.jalur });
     });
   });
 

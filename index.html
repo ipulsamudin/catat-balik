@@ -14,7 +14,7 @@
 </head>
 <body>
 
-<div id="banner" class="banner" hidden>
+<div id="banner" class="banner" role="status" aria-live="polite" hidden>
   <span id="banner-text"></span>
   <span class="banner-actions">
     <button type="button" id="banner-action" class="btn btn-sm" hidden></button>
@@ -34,7 +34,14 @@
 
 <main id="view" class="view" tabindex="-1"></main>
 
+<!-- Satu elemen nav untuk dua wujud: tabbar bawah di ponsel, sidebar kiri di
+     desktop (lihat blok min-width:1024px di app.css). Butir ber-kelas
+     rail-only hanya tampil saat jadi sidebar. -->
 <nav class="tabbar" aria-label="Navigasi utama">
+  <a href="#/" class="brand rail-brand rail-only">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h11l5 5v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="M8 13h8M8 16.5h5"/></svg>
+    <span>Catat Balik</span>
+  </a>
   <a href="#/" data-tab="beranda">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
     <span>Beranda</span>
@@ -55,7 +62,38 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
     <span>Lainnya</span>
   </a>
+  <span class="rail-sep rail-only" aria-hidden="true"></span>
+  <a href="#/acara" class="rail-link rail-only">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+    <span>Acara</span>
+  </a>
+  <a href="#/cetak" class="rail-link rail-only">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5"/><rect x="4" y="9" width="16" height="7" rx="1.5"/><path d="M7 16h10v4H7z"/></svg>
+    <span>Cetak</span>
+  </a>
+  <a href="#/impor" class="rail-link rail-only">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10M8.5 9.5 12 13l3.5-3.5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+    <span>Impor</span>
+  </a>
+  <a href="#/pengaturan" class="rail-link rail-only">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+    <span>Pengaturan</span>
+  </a>
 </nav>
+
+<!-- Dialog konfirmasi (pengganti window.confirm). method="dialog" membuat
+     tombol menutup sendiri dan mengisi returnValue; Esc memberi nilai kosong
+     yang diperlakukan sebagai batal. -->
+<dialog id="sheet" class="sheet" aria-labelledby="sheet-judul">
+  <form method="dialog" class="sheet-isi">
+    <h2 id="sheet-judul">Konfirmasi</h2>
+    <p class="sheet-teks" id="sheet-teks"></p>
+    <div class="sheet-aksi">
+      <button type="submit" value="batal" class="btn" id="sheet-batal">Batal</button>
+      <button type="submit" value="ya" class="btn btn-primary" id="sheet-ya">Lanjutkan</button>
+    </div>
+  </form>
+</dialog>
 
 <noscript>
   <p style="padding:1rem">Aplikasi ini membutuhkan JavaScript. Mohon aktifkan JavaScript di browser Anda.</p>
