@@ -8,7 +8,7 @@ import {
 } from '../db.js';
 import { ARAH, JENIS, validasiEntri, idSudahDibalas, nilaiEntri, deskripsiEntri, cariOrangByNama, saranBalasan, hitungNeraca } from '../model.js';
 import { esc, hariIni, ribuan, parseNominal, rupiah, tanggal, LABEL_JENIS_ACARA } from '../fmt.js';
-import { judul, sukses, galat, konfirmasi, opsi, pada } from '../ui.js';
+import { judul, sukses, galat, tanya, opsi, pada } from '../ui.js';
 import { ke } from '../router.js';
 
 export const judulHalaman = 'Catat';
@@ -292,9 +292,9 @@ function ikat() {
     if (ev.target.name === 'nama' || ev.target.name === 'event_id') gambar(baca());
   });
 
-  pada(kotak, '[data-aksi="hapus"]', 'click', () => {
+  pada(kotak, '[data-aksi="hapus"]', 'click', async () => {
     if (!sedangEdit) return;
-    if (!konfirmasi('Hapus catatan ini? Neraca akan ikut berubah.')) return;
+    if (!await tanya('Hapus catatan ini? Neraca akan ikut berubah.', { ya: 'Hapus', bahaya: true })) return;
     hapusBaris('entries', sedangEdit.id);
     sukses('Catatan dihapus.');
     ke(konteks.query.kembali || '/daftar');

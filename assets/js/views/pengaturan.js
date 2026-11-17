@@ -6,7 +6,7 @@ import { backupObjek, bacaBackup, namaFile } from '../csv.js';
 import { konfigurasi, terkonfigurasi, simpanKonfigurasi, masuk, daftar, keluar, sesi } from '../supabase.js';
 import { sinkron, onStatus, resetCursor, STATUS } from '../sync.js';
 import { esc, ribuan, parseNominal, waktuSingkat } from '../fmt.js';
-import { judul, pada, sukses, galat, banner, konfirmasi, unduhFile, pilihFile, bacaTeks, opsi, nilaiForm } from '../ui.js';
+import { judul, pada, sukses, galat, banner, tanya, unduhFile, pilihFile, bacaTeks, opsi, nilaiForm } from '../ui.js';
 import { ke } from '../router.js';
 
 export const judulHalaman = 'Pengaturan';
@@ -152,11 +152,11 @@ function blokAuth(sesiAktif) {
 }
 
 function ikat(host, ctx) {
-  pada(host, '#form-cloud', 'submit', (ev) => {
+  pada(host, '#form-cloud', 'submit', async (ev) => {
     ev.preventDefault();
     const v = nilaiForm(ev.target);
     if (v.supabaseUrl && !/^https:\/\/[^\s]+\.supabase\.(co|in)$/i.test(v.supabaseUrl.replace(/\/+$/, ''))) {
-      if (!konfirmasi('URL tidak berbentuk https://xxxx.supabase.co. Simpan saja?')) return;
+      if (!await tanya('URL tidak berbentuk https://xxxx.supabase.co. Simpan saja?')) return;
     }
     simpanKonfigurasi(v.supabaseUrl, v.anonKey);
     sukses('Koneksi disimpan.');
@@ -210,7 +210,7 @@ function ikat(host, ctx) {
   });
 
   pada(host, '#tarik-ulang', 'click', async () => {
-    if (!konfirmasi('Tarik ulang seluruh data dari server? Perubahan lokal yang belum terkirim tetap aman.')) return;
+    if (!await tanya('Tarik ulang seluruh data dari server? Perubahan lokal yang belum terkirim tetap aman.')) return;
     resetCursor();
     const s = await sinkron();
     if (s.state === 'galat') galat(s.pesan || 'Gagal menarik data.');
@@ -222,7 +222,7 @@ function ikat(host, ctx) {
     const pesan = tertunda
       ? `Masih ada ${tertunda} perubahan yang belum terkirim. Tetap keluar? (perubahan tetap tersimpan di perangkat ini)`
       : 'Keluar dari akun? Data lokal tidak dihapus.';
-    if (!konfirmasi(pesan)) return;
+    if (!await tanya(pesan, { ya: 'Keluar' })) return;
     await keluar();
     sukses('Sudah keluar.');
     ctx.gambarUlang();
@@ -253,7 +253,7 @@ function ikat(host, ctx) {
       const catatanCloud = terkonfigurasi()
         ? '\n\nCatatan: baris yang ada di Supabase tapi tidak ada di backup akan tertarik kembali saat sinkron. Untuk pemulihan bersih, kosongkan tabel di Supabase lebih dulu.'
         : '';
-      if (!konfirmasi(`Ganti seluruh data di perangkat ini dengan backup (${n} catatan)? Data lokal saat ini akan hilang.${catatanCloud}`)) return;
+      if (!await tanya(`Ganti seluruh data di perangkat ini dengan backup (${n} catatan)? Data lokal saat ini akan hilang.${catatanCloud}`, { ya: 'Ganti data', bahaya: true })) return;
       gantiData(isi);
       if (terkonfigurasi()) antreSemua();
       sukses(`Backup dipulihkan: ${n} catatan.`);
@@ -263,13 +263,13 @@ function ikat(host, ctx) {
     }
   });
 
-  pada(host, '#hapus-semua', 'click', () => {
+  pada(host, '#hapus-semua', 'click', async () => {
     const adaCloud = terkonfigurasi();
     const catatanCloud = adaCloud
       ? '\n\nCatatan: data di Supabase TIDAK dihapus dan akan tertarik kembali saat sinkron berikutnya. Untuk menghapus di server, kosongkan tabelnya dari dashboard Supabase.'
       : '';
-    if (!konfirmasi(`HAPUS semua orang, acara, dan catatan di perangkat ini? Tindakan ini tidak bisa dibatalkan — unduh backup dulu.${catatanCloud}`)) return;
-    if (!konfirmasi('Sekali lagi: benar-benar hapus semua data lokal?')) return;
+    if (!await tanya(`HAPUS semua orang, acara, dan catatan di perangkat ini? Tindakan ini tidak bisa dibatalkan — unduh backup dulu.${catatanCloud}`, { ya: 'Hapus semua', bahaya: true })) return;
+    if (!await tanya('Sekali lagi: benar-benar hapus semua data lokal?', { ya: 'Ya, hapus', bahaya: true })) return;
     gantiData({ people: [], events: [], entries: [], settings: data().settings });
     sukses('Data lokal dihapus.');
     ke('/');

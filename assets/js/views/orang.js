@@ -4,7 +4,7 @@ import { data } from '../store.js';
 import { simpanOrang, hapusOrang, cariOrang, jumlahEntriOrang } from '../db.js';
 import { hitungNeraca, saranBalasan, deskripsiEntri, nilaiEntri, idSudahDibalas, ARAH } from '../model.js';
 import { rupiah, rupiahSingkat, esc, inisial, tanggal, jarakWaktu, normalNama, LABEL_HUBUNGAN } from '../fmt.js';
-import { judul, kosong, opsi, pada, sukses, galat, konfirmasi, nilaiForm } from '../ui.js';
+import { judul, kosong, opsi, pada, sukses, galat, tanya, nilaiForm } from '../ui.js';
 import { ke, gantiTanpaRiwayat, querystring } from '../router.js';
 
 export const judulHalaman = 'Orang';
@@ -20,20 +20,24 @@ function daftar(host, ctx) {
   const d = data();
   const { list } = hitungNeraca(d);
   const urut = ctx.query.urut || 'saldo';
-  const q = normalNama(ctx.query.q || '');
 
-  let baris = list.map((s) => ({ ...s, saran: saranBalasan(s.saldo, d.settings, s.tahunTunggu) }));
-  if (q) baris = baris.filter((s) => normalNama(`${s.orang.nama} ${s.orang.alias || ''} ${s.orang.alamat || ''}`).includes(q));
-
-  const pengurut = {
+  const PENGURUT = {
     saldo: (a, b) => b.saldo - a.saldo || a.orang.nama.localeCompare(b.orang.nama, 'id'),
     nama: (a, b) => a.orang.nama.localeCompare(b.orang.nama, 'id'),
     masuk: (a, b) => b.masuk - a.masuk,
     keluar: (a, b) => b.keluar - a.keluar,
-  }[urut] || (() => 0);
-  baris.sort(pengurut);
+  };
 
-  const perlu = baris.filter((s) => s.saldo > 0).length;
+  // Disusun dari argumen, bukan dari ctx.query, supaya hasil filter bisa
+  // digambar ulang sendiri tanpa membangun ulang seluruh view.
+  const susun = (teks, urutan) => {
+    const kunci = normalNama(teks || '');
+    let baris = list.map((s) => ({ ...s, saran: saranBalasan(s.saldo, d.settings, s.tahunTunggu) }));
+    if (kunci) baris = baris.filter((s) => normalNama(`${s.orang.nama} ${s.orang.alias || ''} ${s.orang.alamat || ''}`).includes(kunci));
+    return baris.sort(PENGURUT[urutan] || (() => 0));
+  };
+
+  const perlu = susun(ctx.query.q, urut).filter((s) => s.saldo > 0).length;
 
   host.innerHTML = `
     ${judul('Orang', `${list.length} orang · ${perlu} masih perlu dibalas`)}
@@ -55,10 +59,16 @@ function daftar(host, ctx) {
     <div id="hasil"></div>`;
 
   const gambarHasil = () => {
+    const teks = host.querySelector('[name="q"]').value.trim();
+    const baris = susun(teks, host.querySelector('[name="urut"]').value);
     host.querySelector('#hasil').innerHTML = baris.length
       ? `<div class="list">${baris.map(kartuOrang).join('')}</div>`
-      : kosong(q ? 'Tidak ada orang yang cocok.' : 'Belum ada orang tercatat.',
+      : kosong(teks ? 'Tidak ada orang yang cocok.' : 'Belum ada orang tercatat.',
         '<a class="btn btn-primary" href="#/catat">+ Catat sumbangan</a>');
+    // Hitungan di subtitle dimutasi, bukan dirender ulang lewat judul() -
+    // pola yang sama dipakai daftar.js.
+    const sub = host.querySelector('.page-head .sub');
+    if (sub) sub.textContent = `${list.length} orang · ${baris.filter((s) => s.saldo > 0).length} masih perlu dibalas`;
   };
   gambarHasil();
 
@@ -69,7 +79,9 @@ function daftar(host, ctx) {
       tambah: ctx.query.tambah || '',
     };
     gantiTanpaRiwayat(`/orang${querystring(baru)}`);
-    ctx.gambarUlang({ query: baru });
+    // Sengaja TIDAK ctx.gambarUlang(): membangun ulang view membuat input cari
+    // dibuat ulang, kursor hilang, dan keyboard Android ikut tertutup.
+    gambarHasil();
   };
   pada(host, '#filter select', 'change', terapkan);
   let timer = null;
@@ -231,12 +243,12 @@ function detail(host, ctx) {
     ctx.gambarUlang();
   });
 
-  pada(host, '#hapus-orang', 'click', () => {
+  pada(host, '#hapus-orang', 'click', async () => {
     const n = jumlahEntriOrang(orang.id);
     const pesan = n
       ? `Hapus ${orang.nama} beserta ${n} catatannya? Total masuk/keluar akan ikut berubah.`
       : `Hapus ${orang.nama}?`;
-    if (!konfirmasi(pesan)) return;
+    if (!await tanya(pesan, { ya: 'Hapus orang', bahaya: true })) return;
     hapusOrang(orang.id, { ikutEntri: true });
     sukses(`${orang.nama} dihapus.`);
     ke('/orang');

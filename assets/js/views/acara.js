@@ -4,7 +4,7 @@ import { data } from '../store.js';
 import { simpanAcara, hapusAcara, cariAcara, jumlahEntriAcara, pastikanOrang, orangAktif } from '../db.js';
 import { rekapAcara, aktif } from '../model.js';
 import { rupiah, rupiahSingkat, esc, tanggal, jarakWaktu, hariIni, LABEL_JENIS_ACARA } from '../fmt.js';
-import { judul, kosong, opsi, pada, sukses, galat, konfirmasi, nilaiForm } from '../ui.js';
+import { judul, kosong, opsi, pada, sukses, galat, tanya, nilaiForm } from '../ui.js';
 import { ke } from '../router.js';
 
 export const judulHalaman = 'Acara';
@@ -189,12 +189,12 @@ function detail(host, ctx) {
       </div>` : kosong('Belum ada catatan di acara ini.')}
   `;
 
-  pada(host, '#hapus-acara', 'click', () => {
+  pada(host, '#hapus-acara', 'click', async () => {
     const n = jumlahEntriAcara(acara.id);
     const pesan = n
       ? `Hapus acara "${acara.nama}"? ${n} catatan di dalamnya TIDAK dihapus, hanya dilepas dari acara ini.`
       : `Hapus acara "${acara.nama}"?`;
-    if (!konfirmasi(pesan)) return;
+    if (!await tanya(pesan, { ya: 'Hapus acara', bahaya: true })) return;
     hapusAcara(acara.id, { ikutEntri: false });
     sukses('Acara dihapus.');
     ke('/acara');

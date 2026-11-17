@@ -7,7 +7,7 @@ import { ARAH, JENIS, nilaiEntri, validasiEntri, cariOrangByNama } from '../mode
 import { parseDelimited, templateImpor } from '../csv.js';
 import { bacaXlsx } from '../xlsx.js';
 import { esc, rupiah, hariIni, parseNominal, parseTanggalFleksibel, normalNama, tanggal } from '../fmt.js';
-import { judul, pada, sukses, galat, banner, unduhFile, pilihFile, bacaTeks, opsi, konfirmasi } from '../ui.js';
+import { judul, pada, sukses, galat, banner, unduhFile, pilihFile, bacaTeks, opsi, tanya } from '../ui.js';
 import { ke } from '../router.js';
 
 export const judulHalaman = 'Impor';
@@ -100,7 +100,11 @@ function ikat() {
     gambarPratinjau();
   });
 
-  pada(kotak, '#btn-impor', 'click', jalankanImpor);
+  // jalankanImpor kini async (dialog konfirmasi), jadi penolakannya harus
+  // ditangkap di sini - kalau tidak, galat hilang tanpa jejak.
+  pada(kotak, '#btn-impor', 'click', () => {
+    jalankanImpor().catch((err) => galat(err && err.message ? err.message : String(err)));
+  });
   pada(kotak, '#btn-ulang', 'click', () => { sumber = null; gambar(); });
 }
 
@@ -298,11 +302,11 @@ function gambarPratinjau() {
     </div>`;
 }
 
-function jalankanImpor() {
+async function jalankanImpor() {
   const olahan = olah();
   const siap = olahan.filter((o) => !o.masalah.length);
   if (!siap.length) { galat('Tidak ada baris yang bisa diimpor.'); return; }
-  if (!konfirmasi(`Impor ${siap.length} catatan sekarang?`)) return;
+  if (!await tanya(`Impor ${siap.length} catatan sekarang?`)) return;
 
   const def = bawaan();
   const cacheAcara = new Map();

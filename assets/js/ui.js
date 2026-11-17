@@ -1,5 +1,5 @@
-// Potongan UI yang dipakai berulang: banner, konfirmasi, unduh/baca file,
-// serta pembantu kecil untuk merakit HTML.
+// Potongan UI yang dipakai berulang: banner, dialog konfirmasi, unduh/baca
+// berkas, serta pembantu kecil untuk merakit HTML.
 
 import { esc } from './fmt.js';
 
@@ -15,6 +15,8 @@ export function banner(teks, { kind = 'info', aksi = null, durasi = 0 } = {}) {
 
   txt.textContent = teks;
   el.dataset.kind = kind;
+  // Galat perlu langsung diumumkan; pesan biasa menunggu jeda pembaca layar.
+  el.setAttribute('aria-live', kind === 'galat' ? 'assertive' : 'polite');
   el.hidden = false;
 
   btn.hidden = !aksi;
@@ -36,8 +38,38 @@ export function tutupBanner() {
 export const sukses = (teks) => banner(teks, { durasi: 2600 });
 export const galat = (teks) => banner(teks, { kind: 'galat', durasi: 6000 });
 
-export function konfirmasi(teks) {
-  return window.confirm(teks);
+/**
+ * Konfirmasi memakai <dialog> bawaan browser: dapat focus trap, backdrop, dan
+ * tutup-dengan-Esc tanpa kode tambahan. Mengembalikan Promise<boolean>.
+ *
+ * Namanya sengaja BUKAN `konfirmasi` lagi. Fungsi lama bersifat sinkron, dan
+ * pemanggil yang lupa `await` akan melihat `!Promise` === false sehingga aksi
+ * destruktif jalan tanpa ditanya. Dengan nama baru, pemanggil yang terlewat
+ * gagal keras di `npm test` (tools/cek-impor.mjs memeriksa named export).
+ */
+export function tanya(teks, { judul: judulTeks = 'Konfirmasi', ya = 'Lanjutkan', batal = 'Batal', bahaya = false } = {}) {
+  const dlg = document.getElementById('sheet');
+  if (!dlg || typeof dlg.showModal !== 'function') return Promise.resolve(window.confirm(teks));
+
+  document.getElementById('sheet-judul').textContent = judulTeks;
+  document.getElementById('sheet-teks').textContent = teks;
+
+  const btnYa = document.getElementById('sheet-ya');
+  const btnBatal = document.getElementById('sheet-batal');
+  btnYa.textContent = ya;
+  btnYa.className = bahaya ? 'btn btn-danger' : 'btn btn-primary';
+  btnBatal.textContent = batal;
+
+  return new Promise((resolve) => {
+    const selesai = () => {
+      dlg.removeEventListener('close', selesai);
+      resolve(dlg.returnValue === 'ya');
+    };
+    dlg.addEventListener('close', selesai);
+    dlg.returnValue = ''; // Esc meninggalkan nilai kosong = batal
+    dlg.showModal();
+    btnBatal.focus(); // fokus awal di pilihan yang aman
+  });
 }
 
 // ---------- file ----------
